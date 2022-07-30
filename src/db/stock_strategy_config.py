@@ -1,4 +1,4 @@
-from base import *
+from src.db.base import *
 
 
 class StockStrategyConfig(BaseModel):
@@ -20,11 +20,11 @@ class StockStrategyConfig(BaseModel):
         )
 
 
-def query_strategy_config(stock_code, strategy):
+def query_strategy_config(stock_code, strategy: Strategy) -> StockStrategyConfig:
     try:
-        return StockStrategyConfig.get(stock_code=stock_code, strategy=strategy)
+        return StockStrategyConfig.get(stock_code=stock_code, strategy=strategy.value)
     except DoesNotExist:
-        logger.info('not exist stock strategy config: stock_code={}, strategy={}', stock_code, strategy)
+        logger.info('not exist stock strategy config: stock_code={}, strategy={}', stock_code, strategy.value)
         return None
 
 

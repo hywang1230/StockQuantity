@@ -1,4 +1,4 @@
-from base import *
+from src.db.base import *
 
 
 class GridStrategyConfig(BaseModel):
