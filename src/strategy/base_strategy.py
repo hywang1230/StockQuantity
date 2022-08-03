@@ -1,6 +1,5 @@
 from src.configuration import FutuConfiguration
 from src.db import *
-from src.order_enum import *
 from futu import *
 import pandas as pd
 from src.util import *
@@ -117,11 +116,11 @@ class OrderLock(object):
         self.__lock_set.remove(key)
 
     def __build_key(self, stock_code, strategy: Strategy, side: StockOrderSide) -> str:
-        return stock_code + '|' + strategy.value + '|' + side.value
+        return stock_code + '|' + strategy.value + '|' + str(side.value)
 
 
 class BaseStrategy(object):
-    def order(self, stock_code:str, strategy: Strategy, price: Decimal, side: StockOrderSide, **kwargs):
+    def order(self, stock_code: str, strategy: Strategy, price: Decimal, side: StockOrderSide, **kwargs):
         strategy_config = stock_strategy_config.query_strategy_config(stock_code, strategy)
         if strategy_config is None:
             logger.info('no strategy config of stock_code={}, strategy={}', stock_code, strategy)
@@ -141,7 +140,7 @@ class BaseStrategy(object):
             logger.info('stock_code={}, strategy={},side={} reminder_quantity is zero', stock_code, strategy, side)
             return False
 
-        lock = OrderLock().instance()
+        lock = OrderLock.instance()
         if not (lock.lock(stock_code, strategy, side)):
             logger.info('stock_code={}, strategy={},side={} lock fail', stock_code, strategy, side)
             return False
@@ -152,13 +151,13 @@ class BaseStrategy(object):
             market = StockMarket[strategy_config.market]
             success, order_id = self.place_order(stock_code, market, price, qty, side)
             if success:
-                trade_order_record.save_record(stock_code, market, order_id, price, qty, side)
+                trade_order_record.save_record(stock_code, market, strategy, order_id, price, qty, side)
             return success
         finally:
             lock.release_lock(stock_code, strategy, side)
 
     def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
-        return False
+        return False, None
 
 
 class LongbridgeOrder(BaseStrategy):
@@ -168,10 +167,11 @@ class LongbridgeOrder(BaseStrategy):
             resp = LongbridgeContext.instance().get_trade_context().submit_order(
                 side=OrderSide.Sell if side == StockOrderSide.SELL else OrderSide.Buy,
                 symbol=stock_code + '.' + market.value,
-                order_type=OrderType.MO,
+                order_type=OrderType.LO,
                 submitted_quantity=qty,
                 outside_rth=OutsideRTH.RTHOnly,
-                time_in_force=TimeInForceType.Day
+                time_in_force=TimeInForceType.Day,
+                submitted_price=Decimal(price + 100 if side == StockOrderSide.SELL else price - 100)
             )
 
             order_id = resp.order_id
@@ -183,7 +183,7 @@ class LongbridgeOrder(BaseStrategy):
 
             return True, order_id
 
-        except OpenApiException:
+        except:
             logger.exception('order success, stock_code={}, price={}, quantity={}, is_sell={}', stock_code,
                              price, qty, side)
-        return False
+        return False, None

@@ -25,7 +25,6 @@ def query_strategy_config(stock_code, strategy: Strategy) -> StockStrategyConfig
         return StockStrategyConfig.get(stock_code=stock_code, strategy=strategy.value)
     except DoesNotExist:
         logger.info('not exist stock strategy config: stock_code={}, strategy={}', stock_code, strategy.value)
-        return None
 
 
 def query_all_config(strategy: Strategy):

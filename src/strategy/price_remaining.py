@@ -1,4 +1,5 @@
 from src.strategy.base_strategy import *
+from time import sleep
 
 
 class PriceReminder(PriceReminderHandlerBase):
@@ -13,12 +14,12 @@ class PriceReminder(PriceReminderHandlerBase):
         strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
 
         if strategy_config is None:
-            logging.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
+            logger.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
             return
 
         price = content['price']
         side = StockOrderSide.SELL if content['reminder_type'] == 'PRICE_UP' else StockOrderSide.BUY
-        success = LongbridgeOrder.order(stock_code, Strategy.GRID, Decimal(price), side)
+        success = LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side)
 
         if not success:
             reset_price_reminder(strategy_config)
@@ -70,16 +71,16 @@ def reset_price_reminder(strategy_config):
 
 
 def on_order_changed(event: PushOrderChanged):
-    logging.info("receive order changed msg:{}".format(event))
+    logger.info("receive order changed msg:{}", event)
 
     order_status = event.status
     if order_status in (OrderStatus.Canceled, OrderStatus.Filled):
         order_status = StockOrderStatus.SUCCESS if order_status == OrderStatus.Filled else StockOrderStatus.CANCELED
-        stock_code = event.symbol.split('.')[0]
+        stock_code = event.symbol.split('.')[0].zfill(5)
         strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
 
         if strategy_config is None:
-            logging.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
+            logger.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
             return
         grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
         price = event.executed_price if order_status == StockOrderStatus.SUCCESS else event.submitted_price
@@ -102,13 +103,29 @@ def on_order_changed(event: PushOrderChanged):
         reset_price_reminder(strategy_config)
 
 
+class MyThread(threading.Thread):
+
+    def run(self) -> None:
+        print(1)
+        LongbridgeContext.instance().get_trade_context().set_on_order_changed(on_order_changed)
+        LongbridgeContext.instance().get_trade_context().subscribe([TopicType.Private])
+        # condition = threading.Condition()
+        # condition.acquire()
+        # condition.wait()
+        # print(2)
+        while True:
+            sleep(1)
+            print('---------' + datetime.datetime.now().strftime('%H:%M:%S'))
+
+
 def init():
     strategy_config_list = stock_strategy_config.query_all_config(Strategy.GRID)
 
     if strategy_config_list is not None:
-        LongbridgeContext.instance().get_trade_context().set_on_order_changed(on_order_changed)
+        MyThread().start()
         FutuContext.instance().get_quote_context().set_handler(PriceReminder())
 
-    for strategy_config in strategy_config_list:
-        reset_price_reminder(strategy_config)
+    # for strategy_config in strategy_config_list:
+    #     reset_price_reminder(strategy_config)
     print('price_reminder start success...')
+
