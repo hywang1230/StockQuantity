@@ -3,7 +3,7 @@ from playhouse.shortcuts import ReconnectMixin
 from src.configuration import DbConfiguration
 from src.util import *
 from decimal import Decimal
-from src.order_enum import StockOrderSide, StockMarket, Strategy
+from src.order_enum import StockOrderSide, StockMarket, Strategy, StockOrderStatus
 import datetime
 from decimal import Decimal
 

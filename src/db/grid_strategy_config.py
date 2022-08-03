@@ -17,7 +17,7 @@ class GridStrategyConfig(BaseModel):
 
 def query_strategy_config(stock_strategy_id: int) -> GridStrategyConfig:
     try:
-        return GridStrategyConfig.get(stock_strategy_id=stock_strategy_id)
+        return GridStrategyConfig.get(GridStrategyConfig.stock_strategy_id == stock_strategy_id)
     except DoesNotExist:
         logger.info('not exist grid strategy config: stock_strategy_id={}', stock_strategy_id)
 

@@ -28,8 +28,8 @@ def query_strategy_config(stock_code, strategy: Strategy) -> StockStrategyConfig
         return None
 
 
-def query_all_config():
-    return StockStrategyConfig.select()
+def query_all_config(strategy: Strategy):
+    return StockStrategyConfig.select().where(StockStrategyConfig.strategy == strategy.value)
 
 
 def update_reminder_quantity(config_id: int, quantity: int, side: StockOrderSide):

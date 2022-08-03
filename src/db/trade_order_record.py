@@ -39,15 +39,17 @@ def save_record(stock_code: str, market: StockMarket, strategy: Strategy, order_
         logger.exception('save record error, record={}', trade_order_record)
 
 
-def update_record(record: TradeOrderRecord):
+def update_record(order_id, price, status: StockOrderStatus, finish_time, fee):
     try:
-        query = TradeOrderRecord.update(price=record.price,
-                                        status=record.status,
-                                        finish_time=record.time,
-                                        fee=record.fee)\
-            .where(TradeOrderRecord.order_id == record.order_id)
+        query = TradeOrderRecord.update(price=price,
+                                        status=status.value,
+                                        finish_time=finish_time,
+                                        fee=fee) \
+            .where(TradeOrderRecord.order_id == order_id)
         query.execute()
 
-        logger.info('update record success, record={}', record)
+        logger.info('update record success, order_id={}, price={}, status={}, finish_time={}, fee={}', order_id,
+                    price, status, finish_time, fee)
     except:
-        logger.exception('update record error, record={}', record)
+        logger.exception('update record error, order_id={}, price={}, status={}, finish_time={}, fee={}', order_id,
+                         price, status, finish_time, fee)

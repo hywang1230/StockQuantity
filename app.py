@@ -1,5 +1,7 @@
 from flask import Flask
+from src.strategy import price_remaining
 
+price_remaining.init()
 app = Flask(__name__)
 
 

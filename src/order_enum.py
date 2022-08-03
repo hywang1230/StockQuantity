@@ -13,3 +13,10 @@ class StockMarket(Enum):
 
 class Strategy(Enum):
     GRID = 'grid'
+
+
+class StockOrderStatus(Enum):
+    SUBMIT = 0
+    SUCCESS = 1
+    FAIL = 2
+    CANCELED = 3
