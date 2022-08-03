@@ -85,14 +85,13 @@ def on_order_changed(event: PushOrderChanged):
         grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
         price = event.executed_price if order_status == StockOrderStatus.SUCCESS else event.submitted_price
         order_id = event.order_id
-        finish_time = event.updated_at
         base_price = grid_config.base_price
         side = StockOrderSide.SELL if event.side == OrderSide.Sell else StockOrderSide.BUY
         market = StockMarket[strategy_config.market]
         qty = event.executed_quantity
         fee = 0 if order_status == StockOrderStatus.CANCELED else \
             calculate_fee(price, qty, side, market)
-        trade_order_record.update_record(order_id, price, order_status, finish_time, fee)
+        trade_order_record.update_record(order_id, price, order_status, fee)
 
         if order_status == StockOrderStatus.SUCCESS:
             base_price = calculate_amplitude_price(base_price, grid_config, side == StockOrderSide.SELL)
@@ -118,14 +117,58 @@ class MyThread(threading.Thread):
             print('---------' + datetime.datetime.now().strftime('%H:%M:%S'))
 
 
+class TradeOrderHandler(TradeOrderHandlerBase):
+    """ order update push"""
+
+    def on_recv_rsp(self, rsp_pb):
+        ret, content = super(TradeOrderHandler, self).on_recv_rsp(rsp_pb)
+        logger.info('receive trade order msg, content: {}', content)
+        if ret == RET_OK:
+            if content['trd_env'][0] == 'SIMULATE':
+                return
+
+            order_status = content['order_status'][0]
+            if order_status not in ('CANCELLED_ALL', 'FILLED_ALL'):
+                return
+
+            order_status = StockOrderStatus.SUCCESS if order_status == 'FILLED_ALL' else StockOrderStatus.CANCELED
+            stock_code = content['code'][0].split('.')[-1]
+            strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
+
+            if strategy_config is None:
+                logger.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
+                return
+            grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
+            price = content['dealt_avg_price'][0]
+            order_id = content['order_id'][0]
+            base_price = grid_config.base_price
+            side = StockOrderSide.SELL if content['trd_side'][0] in ('SELL', 'SELL_SHORT') else StockOrderSide.BUY
+            market = StockMarket[strategy_config.market]
+
+            qty = content['dealt_qty'][0]
+            fee = 0 if order_status == StockOrderStatus.CANCELED else \
+                    calculate_fee(price, qty, side, market)
+            trade_order_record.update_record(order_id, price, order_status, fee)
+
+            if order_status == StockOrderStatus.SUCCESS:
+                base_price = calculate_amplitude_price(base_price, grid_config, side == StockOrderSide.SELL)
+
+                grid_strategy_config.update_base_price(grid_config.id, base_price)
+                stock_strategy_config.update_reminder_quantity(strategy_config.id, qty, side)
+
+            reset_price_reminder(strategy_config)
+
+
 def init():
     strategy_config_list = stock_strategy_config.query_all_config(Strategy.GRID)
 
     if strategy_config_list is not None:
-        MyThread().start()
+        # MyThread().start()
+        FutuContext.instance().get_trade_context(StockMarket.US).set_handler(TradeOrderHandler())
+        FutuContext.instance().get_trade_context(StockMarket.HK).set_handler(TradeOrderHandler())
         FutuContext.instance().get_quote_context().set_handler(PriceReminder())
 
-    # for strategy_config in strategy_config_list:
-    #     reset_price_reminder(strategy_config)
+    for strategy_config in strategy_config_list:
+        reset_price_reminder(strategy_config)
     print('price_reminder start success...')
 

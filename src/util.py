@@ -13,7 +13,8 @@ def info_only(record):
     return record["level"].name == "INFO"
 
 
-logger.add(sys.stderr, format=log_format, level="INFO", filter=info_only)
+logger.add(ROOT_DIR + '/logs/app.{time:YYYY-MM-DD}.log', format=log_format, level="INFO", filter=info_only,
+           retention='1 days')
 logger.add(ROOT_DIR + '/logs/error.{time:YYYY-MM-DD}.log', format=log_format, level="ERROR", retention='1 days')
 
 
@@ -23,7 +24,7 @@ def calculate_fee(price, qty, side: StockOrderSide, market=StockMarket.US):
 
     total = price * qty
     is_sell = side == StockOrderSide.SELL
-    fee = max(1, round(qty * 0.005, 2)) + round(qty * 0.003, 2) \
+    fee = max(1, round(qty * 0.005, 2)) + max(1, round(qty * 0.005, 2)) + round(qty * 0.003, 2) \
           + (max(0.01, round(total * 0.0000229, 2)) if is_sell else 0) \
           + (min(5.95, max(0.01, round(qty * 0.000119, 2))) if is_sell else 0)
 

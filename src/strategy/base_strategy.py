@@ -187,3 +187,27 @@ class LongbridgeOrder(BaseStrategy):
             logger.exception('order success, stock_code={}, price={}, quantity={}, is_sell={}', stock_code,
                              price, qty, side)
         return False, None
+
+
+class FutuOrder(BaseStrategy):
+
+    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
+        trd_side = TrdSide.SELL if side == StockOrderSide.SELL else TrdSide.BUY
+
+        ret, data = FutuContext.instance().get_trade_context(market).place_order(price=price, qty=qty, code=stock_code,
+                                                                                 trd_side=trd_side,
+                                                                                 fill_outside_rth=False,
+                                                                                 order_type=OrderType.MARKET,
+                                                                                 trd_env=TrdEnv.REAL)
+        if ret == RET_OK:
+            order_id = data['order_id'][0]
+            logger.info('place order success, stock_code={}, price={}, quantity={}, side={}, order_id={}', stock_code,
+                        price, qty,
+                        side, order_id)
+
+            return True, order_id
+        else:
+            logger.info('place order success, stock_code={}, price={}, quantity={}, side={}, error={}', stock_code,
+                        price, qty,
+                        side, data)
+            return False, None
