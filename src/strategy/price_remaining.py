@@ -21,11 +21,8 @@ class PriceReminder(PriceReminderHandlerBase):
         side = StockOrderSide.SELL if content['reminder_type'] == 'PRICE_UP' else StockOrderSide.BUY
         success = LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side)
 
-        if success:
-            # todo 更新配置
-            pass
-
-        reset_price_reminder(strategy_config)
+        if not success:
+            reset_price_reminder(strategy_config)
 
 
 def reset_price_reminder(strategy_config: StockStrategyConfig) -> None:
