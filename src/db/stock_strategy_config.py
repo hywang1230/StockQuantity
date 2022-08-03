@@ -32,13 +32,13 @@ def query_all_config():
     return StockStrategyConfig.select()
 
 
-def update_reminder_quantity(config_id: int, quantity: int, side: OrderSide):
+def update_reminder_quantity(config_id: int, quantity: int, side: StockOrderSide):
     try:
         config = StockStrategyConfig.get(StockStrategyConfig.id == config_id)
-        remaining_sell_quantity = config.remaining_sell_quantity - quantity if side == OrderSide.SELL \
+        remaining_sell_quantity = config.remaining_sell_quantity - quantity if side == StockOrderSide.SELL \
             else config.remaining_sell_quantity + quantity
 
-        remaining_buy_quantity = config.remaining_buy_quantity + quantity if side == OrderSide.SELL \
+        remaining_buy_quantity = config.remaining_buy_quantity + quantity if side == StockOrderSide.SELL \
             else config.remaining_buy_quantity - quantity
 
         query = StockStrategyConfig.update(remaining_sell_quantity=remaining_sell_quantity,

@@ -21,8 +21,8 @@ class TradeOrderRecord(BaseModel):
         table_name = 'trade_order_record'
 
 
-def save_record(stock_code, market: Market, strategy: Strategy, order_id, price: Decimal, quantity: int,
-                side: OrderSide, order_time: datetime):
+def save_record(stock_code: str, market: StockMarket, strategy: Strategy, order_id: str, price: Decimal, quantity: int,
+                side: StockOrderSide) -> None:
     trade_order_record = TradeOrderRecord()
     trade_order_record.stock_code = stock_code
     trade_order_record.market = market.value
@@ -31,11 +31,10 @@ def save_record(stock_code, market: Market, strategy: Strategy, order_id, price:
     trade_order_record.price = price
     trade_order_record.quantity = quantity
     trade_order_record.side = side.value
-    trade_order_record.order_time = order_time
+    trade_order_record.order_time = datetime.datetime.now()
     try:
         trade_order_record.save()
         logger.info('save record success, record={}', trade_order_record)
-        return trade_order_record.id
     except:
         logger.exception('save record error, record={}', trade_order_record)
 
@@ -52,4 +51,3 @@ def update_record(record: TradeOrderRecord):
         logger.info('update record success, record={}', record)
     except:
         logger.exception('update record error, record={}', record)
-

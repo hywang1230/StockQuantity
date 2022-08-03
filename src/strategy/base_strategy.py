@@ -1,11 +1,13 @@
 from src.configuration import FutuConfiguration
 from src.db import *
 from src.order_enum import *
-from futu import SysConfig, OpenSecTradeContext, OpenQuoteContext, TrdMarket, SecurityFirm, TrdSide, RET_OK, TrdEnv, \
-    OrderType
+from futu import *
 import pandas as pd
 from src.util import *
 import datetime
+import threading
+from longbridge.openapi import *
+from decimal import Decimal
 
 pd.set_option('display.max_rows', 5000)
 pd.set_option('display.max_columns', 5000)
@@ -35,12 +37,12 @@ class FutuContext(object):
 
     def __init_trade_context(self):
         config = FutuConfiguration()
-        self.__trd_ctx_dict = {Market.US: OpenSecTradeContext(filter_trdmarket=TrdMarket.US, host=config.host,
-                                                              port=config.port,
-                                                              security_firm=SecurityFirm.FUTUSECURITIES),
-                               Market.HK: OpenSecTradeContext(filter_trdmarket=TrdMarket.HK, host=config.host,
-                                                              port=config.port,
-                                                              security_firm=SecurityFirm.FUTUSECURITIES)}
+        self.__trd_ctx_dict = {StockMarket.US: OpenSecTradeContext(filter_trdmarket=TrdMarket.US, host=config.host,
+                                                                   port=config.port,
+                                                                   security_firm=SecurityFirm.FUTUSECURITIES),
+                               StockMarket.HK: OpenSecTradeContext(filter_trdmarket=TrdMarket.HK, host=config.host,
+                                                                   port=config.port,
+                                                                   security_firm=SecurityFirm.FUTUSECURITIES)}
 
         for ctx in self.__trd_ctx_dict.values():
             ctx.unlock_trade(password_md5=config.unlock_password_md5)
@@ -49,15 +51,77 @@ class FutuContext(object):
         config = FutuConfiguration()
         self.__quote_ctx = OpenQuoteContext(host=config.host, port=config.port)
 
-    def get_trade_context(self, market: Market) -> OpenSecTradeContext:
+    def get_trade_context(self, market: StockMarket) -> OpenSecTradeContext:
         return self.__trd_ctx_dict.get(market)
 
     def get_quote_context(self) -> OpenQuoteContext:
         return self.__quote_ctx
 
 
+class LongbridgeContext(object):
+    _instance = None
+
+    __trade_context = None
+
+    def __init__(self):
+        raise RuntimeError('Call instance() instead')
+
+    @classmethod
+    def instance(cls):
+        if cls._instance is None:
+            cls._instance = cls.__new__(cls)
+
+            cls.__init_trade_context(cls._instance)
+        return cls._instance
+
+    def __init_trade_context(self):
+        config = longbridge_auth.get_auth()
+        auth_config = Config(app_key=config.app_key, app_secret=config.app_secret, access_token=config.access_token)
+        self.__trade_context = TradeContext(auth_config)
+
+    def get_trade_context(self) -> TradeContext:
+        return self.__trade_context
+
+
+class OrderLock(object):
+    _instance = None
+
+    __lock_set = set()
+
+    __lock = threading.Lock()
+
+    def __init__(self):
+        raise RuntimeError('Call instance() instead')
+
+    @classmethod
+    def instance(cls):
+        if cls._instance is None:
+            cls._instance = cls.__new__(cls)
+        return cls._instance
+
+    def lock(self, stock_code, strategy: Strategy, side: StockOrderSide) -> bool:
+        lock = threading.Lock()
+        lock.acquire()
+        key = self.__build_key(stock_code, strategy, side)
+        try:
+            if key in self.__lock_set:
+                return False
+
+            self.__lock_set.add(key)
+            return True
+        finally:
+            lock.release()
+
+    def release_lock(self, stock_code: str, strategy: Strategy, side: StockOrderSide) -> None:
+        key = self.__build_key(stock_code, strategy, side)
+        self.__lock_set.remove(key)
+
+    def __build_key(self, stock_code, strategy: Strategy, side: StockOrderSide) -> str:
+        return stock_code + '|' + strategy.value + '|' + side.value
+
+
 class BaseStrategy(object):
-    def order(self, stock_code, strategy: Strategy, price, side: OrderSide, **kwargs):
+    def order(self, stock_code:str, strategy: Strategy, price: Decimal, side: StockOrderSide, **kwargs):
         strategy_config = stock_strategy_config.query_strategy_config(stock_code, strategy)
         if strategy_config is None:
             logger.info('no strategy config of stock_code={}, strategy={}', stock_code, strategy)
@@ -71,31 +135,55 @@ class BaseStrategy(object):
             return False
 
         # check reminder quantity > 0
-        reminder_quantity = strategy_config.remaining_sell_quantity if side == OrderSide.SELL \
+        reminder_quantity = strategy_config.remaining_sell_quantity if side == StockOrderSide.SELL \
             else strategy_config.remaining_buy_quantity
         if reminder_quantity <= 0:
             logger.info('stock_code={}, strategy={},side={} reminder_quantity is zero', stock_code, strategy, side)
             return False
 
-        trd_side = TrdSide.SELL if side == OrderSide.SELL else TrdSide.BUY
-        qty = strategy_config.single_sell_quantity if side == OrderSide.SELL else strategy_config.single_buy_quantity
-        stock_code = strategy_config.market + '.' + stock_code
-        market = Market[strategy_config.market]
-        ret, data = FutuContext.get_trade_context(market).place_order(price=price,
-                                                                      qty=qty,
-                                                                      code=stock_code,
-                                                                      trd_side=trd_side,
-                                                                      fill_outside_rth=False,
-                                                                      order_type=OrderType.MARKET,
-                                                                      trd_env=TrdEnv.REAL)
-        if ret == RET_OK:
-            logger.info('place order success, stock_code={}, price={}, quantity={}, side={}'.format(stock_code,
-                                                                                                    price, qty,
-                                                                                                    side))
-            order_id = data['order_id'][0]
+        lock = OrderLock().instance()
+        if not (lock.lock(stock_code, strategy, side)):
+            logger.info('stock_code={}, strategy={},side={} lock fail', stock_code, strategy, side)
+            return False
+
+        try:
+            qty = strategy_config.single_sell_quantity if StockOrderSide.SELL == side \
+                else strategy_config.single_buy_quantity
+            market = StockMarket[strategy_config.market]
+            success, order_id = self.place_order(stock_code, market, price, qty, side)
+            if success:
+                trade_order_record.save_record(stock_code, market, order_id, price, qty, side)
+            return success
+        finally:
+            lock.release_lock(stock_code, strategy, side)
+
+    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
+        return False
+
+
+class LongbridgeOrder(BaseStrategy):
+
+    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
+        try:
+            resp = LongbridgeContext.instance().get_trade_context().submit_order(
+                side=OrderSide.Sell if side == StockOrderSide.SELL else OrderSide.Buy,
+                symbol=stock_code + '.' + market.value,
+                order_type=OrderType.MO,
+                submitted_quantity=qty,
+                outside_rth=OutsideRTH.RTHOnly,
+                time_in_force=TimeInForceType.Day
+            )
+
+            order_id = resp.order_id
+
+            logger.info('order success, stock_code={}, price={}, quantity={}, is_sell={}, order_id={}', stock_code,
+                        price, qty,
+                        side.name,
+                        order_id)
 
             return True, order_id
-        else:
-            logger.error('place_order error: %s', data)
 
+        except OpenApiException:
+            logger.exception('order success, stock_code={}, price={}, quantity={}, is_sell={}', stock_code,
+                             price, qty, side)
         return False

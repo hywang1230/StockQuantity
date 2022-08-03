@@ -1,12 +1,12 @@
 from enum import Enum
 
 
-class OrderSide(Enum):
+class StockOrderSide(Enum):
     SELL = 1
     BUY = 2
 
 
-class Market(Enum):
+class StockMarket(Enum):
     US = 'US'
     HK = 'HK'
 
