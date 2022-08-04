@@ -13,7 +13,8 @@ def info_only(record):
     return record["level"].name == "INFO"
 
 
-logger.add(sys.stderr, format=log_format, level="INFO", filter=info_only)
+logger.add(ROOT_DIR + '/logs/app.{time:YYYY-MM-DD}.log', format=log_format, level="INFO", filter=info_only,
+           retention='1 days')
 logger.add(ROOT_DIR + '/logs/error.{time:YYYY-MM-DD}.log', format=log_format, level="ERROR", retention='1 days')
 
 
