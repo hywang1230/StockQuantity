@@ -76,7 +76,8 @@ def on_order_changed(event: PushOrderChanged):
     order_status = event.status
     if order_status in (OrderStatus.Canceled, OrderStatus.Filled):
         order_status = StockOrderStatus.SUCCESS if order_status == OrderStatus.Filled else StockOrderStatus.CANCELED
-        stock_code = event.symbol.split('.')[0].zfill(5)
+        stock_code = event.symbol.split('.')[0]
+        stock_code = stock_code.zfill(5) if event.symbol.split('.')[-1] == 'HK' else stock_code
         strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
 
         if strategy_config is None:
@@ -90,7 +91,7 @@ def on_order_changed(event: PushOrderChanged):
         market = StockMarket[strategy_config.market]
         qty = event.executed_quantity
         fee = 0 if order_status == StockOrderStatus.CANCELED else \
-            calculate_fee(price, qty, side, market)
+            calculate_fee(price, qty, side, market, True)
         trade_order_record.update_record(order_id, price, order_status, fee)
 
         if order_status == StockOrderStatus.SUCCESS:
@@ -100,21 +101,6 @@ def on_order_changed(event: PushOrderChanged):
             stock_strategy_config.update_reminder_quantity(strategy_config.id, qty, side)
 
         reset_price_reminder(strategy_config)
-
-
-class MyThread(threading.Thread):
-
-    def run(self) -> None:
-        print(1)
-        LongbridgeContext.instance().get_trade_context().set_on_order_changed(on_order_changed)
-        LongbridgeContext.instance().get_trade_context().subscribe([TopicType.Private])
-        # condition = threading.Condition()
-        # condition.acquire()
-        # condition.wait()
-        # print(2)
-        while True:
-            sleep(1)
-            print('---------' + datetime.datetime.now().strftime('%H:%M:%S'))
 
 
 class TradeOrderHandler(TradeOrderHandlerBase):
@@ -159,16 +145,64 @@ class TradeOrderHandler(TradeOrderHandlerBase):
             reset_price_reminder(strategy_config)
 
 
+def query_order_status_task():
+    while True:
+        order_id = longbridge_order_queue.get()
+
+        resp = longbridge_context.get_trade_context().today_orders(order_id=order_id)
+        logger.info("query order status, order_id={}, resp={}", order_id, resp)
+        order_info = resp[0]
+        order_status = order_info.status
+        if order_status in (OrderStatus.Canceled, OrderStatus.Filled, OrderStatus.Rejected):
+            order_status = StockOrderStatus.SUCCESS if order_status == OrderStatus.Filled \
+                else StockOrderStatus.CANCELED
+            stock_code = order_info.symbol.split('.')[0]
+            stock_code = stock_code.zfill(5) if order_info.symbol.split('.')[-1] == 'HK' else stock_code
+            strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
+
+            if strategy_config is None:
+                logger.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
+                return
+            grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
+            price = order_info.executed_price if order_status == StockOrderStatus.SUCCESS else order_info.price
+            base_price = grid_config.base_price
+            side = StockOrderSide.SELL if order_info.side == OrderSide.Sell else StockOrderSide.BUY
+            market = StockMarket[strategy_config.market]
+            qty = order_info.executed_quantity
+            fee = 0 if order_status == StockOrderStatus.CANCELED else \
+                calculate_fee(price, qty, side, market, True)
+            trade_order_record.update_record(order_id, price, order_status, fee)
+
+            if order_status == StockOrderStatus.SUCCESS:
+                base_price = calculate_amplitude_price(base_price, grid_config, side == StockOrderSide.SELL)
+
+                grid_strategy_config.update_base_price(grid_config.id, base_price)
+                stock_strategy_config.update_reminder_quantity(strategy_config.id, qty, side)
+
+            reset_price_reminder(strategy_config)
+        else:
+            longbridge_order_queue.put(order_id)
+            sleep(1)
+
+
+longbridge_context = LongbridgeContext.instance()
+futu_context = FutuContext.instance()
+
+
 def init():
     strategy_config_list = stock_strategy_config.query_all_config(Strategy.GRID)
 
     if strategy_config_list is not None:
-        # MyThread().start()
-        FutuContext.instance().get_trade_context(StockMarket.US).set_handler(TradeOrderHandler())
-        FutuContext.instance().get_trade_context(StockMarket.HK).set_handler(TradeOrderHandler())
-        FutuContext.instance().get_quote_context().set_handler(PriceReminder())
+        t = threading.Thread(target=query_order_status_task)
+        t.start()
+        # longbridge_context.get_trade_context().set_on_order_changed(on_order_changed)
+        # longbridge_context.get_trade_context().subscribe([TopicType.Private])
+        # # FutuContext.instance().get_trade_context(StockMarket.US).set_handler(TradeOrderHandler())
+        # # FutuContext.instance().get_trade_context(StockMarket.HK).set_handler(TradeOrderHandler())
+        futu_context.get_quote_context().set_handler(PriceReminder())
 
     for strategy_config in strategy_config_list:
         reset_price_reminder(strategy_config)
+
     print('price_reminder start success...')
 

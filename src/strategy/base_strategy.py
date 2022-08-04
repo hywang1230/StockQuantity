@@ -7,6 +7,7 @@ import datetime
 import threading
 from longbridge.openapi import *
 from decimal import Decimal
+import queue
 
 pd.set_option('display.max_rows', 5000)
 pd.set_option('display.max_columns', 5000)
@@ -160,6 +161,9 @@ class BaseStrategy(object):
         return False, None
 
 
+longbridge_order_queue = queue.Queue(maxsize=20)
+
+
 class LongbridgeOrder(BaseStrategy):
 
     def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
@@ -167,11 +171,10 @@ class LongbridgeOrder(BaseStrategy):
             resp = LongbridgeContext.instance().get_trade_context().submit_order(
                 side=OrderSide.Sell if side == StockOrderSide.SELL else OrderSide.Buy,
                 symbol=stock_code + '.' + market.value,
-                order_type=OrderType.LO,
+                order_type=OrderType.MO,
                 submitted_quantity=qty,
                 outside_rth=OutsideRTH.RTHOnly,
-                time_in_force=TimeInForceType.Day,
-                submitted_price=Decimal(price + 100 if side == StockOrderSide.SELL else price - 100)
+                time_in_force=TimeInForceType.Day
             )
 
             order_id = resp.order_id
@@ -180,7 +183,7 @@ class LongbridgeOrder(BaseStrategy):
                         price, qty,
                         side.name,
                         order_id)
-
+            longbridge_order_queue.put(order_id)
             return True, order_id
 
         except:
