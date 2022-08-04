@@ -3,9 +3,9 @@ name: Publish Docker image   # workflow名称，可以在Github项目主页的�
 
 on:
   push:
-    branches: [ "a" ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ "a" ]
+    branches: [ "master" ]
 
 jobs:  # workflow中的job
 
