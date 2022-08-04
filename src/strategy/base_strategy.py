@@ -75,12 +75,21 @@ class LongbridgeContext(object):
         return cls._instance
 
     def __init_trade_context(self):
-        config = longbridge_auth.get_auth()
-        auth_config = Config(app_key=config.app_key, app_secret=config.app_secret, access_token=config.access_token)
+        self.__refresh_token()
+        auth_config = self.__get_config()
         self.__trade_context = TradeContext(auth_config)
 
     def get_trade_context(self) -> TradeContext:
         return self.__trade_context
+
+    def __refresh_token(self):
+        auth_config = self.__get_config()
+        resp = auth_config.refresh_access_token()
+        longbridge_auth.update_token(resp, datetime.datetime.now().date() + datetime.timedelta(days=90))
+
+    def __get_config(self):
+        config = longbridge_auth.get_auth()
+        return Config(app_key=config.app_key, app_secret=config.app_secret, access_token=config.access_token)
 
 
 class OrderLock(object):
