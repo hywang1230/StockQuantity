@@ -87,7 +87,8 @@ class LongbridgeContext(object):
         resp = auth_config.refresh_access_token()
         longbridge_auth.update_token(resp, datetime.datetime.now().date() + datetime.timedelta(days=90))
 
-    def __get_config(self):
+    @staticmethod
+    def __get_config():
         config = longbridge_auth.get_auth()
         return Config(app_key=config.app_key, app_secret=config.app_secret, access_token=config.access_token)
 
@@ -125,7 +126,8 @@ class OrderLock(object):
         key = self.__build_key(stock_code, strategy, side)
         self.__lock_set.remove(key)
 
-    def __build_key(self, stock_code, strategy: Strategy, side: StockOrderSide) -> str:
+    @staticmethod
+    def __build_key(stock_code, strategy: Strategy, side: StockOrderSide) -> str:
         return stock_code + '|' + strategy.value + '|' + str(side.value)
 
 
