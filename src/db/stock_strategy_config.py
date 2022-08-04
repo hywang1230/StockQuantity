@@ -10,6 +10,7 @@ class StockStrategyConfig(BaseModel):
     single_buy_quantity = IntegerField()
     remaining_buy_quantity = IntegerField()
     remaining_sell_quantity = IntegerField()
+    order_account = IntegerField()
     gmt_create = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
     gmt_modified = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 

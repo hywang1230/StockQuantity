@@ -20,3 +20,8 @@ class StockOrderStatus(Enum):
     SUCCESS = 1
     FAIL = 2
     CANCELED = 3
+
+
+class OrderAccount(Enum):
+    FUTU = 1
+    LONGBRIDGE = 2
