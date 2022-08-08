@@ -1,7 +1,7 @@
 from loguru import logger
 import os
-import sys
 from src.order_enum import *
+from src.telegram_notify import *
 
 ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -16,6 +16,7 @@ def info_only(record):
 logger.add(ROOT_DIR + '/logs/app.{time:YYYY-MM-DD}.log', format=log_format, level="INFO", filter=info_only,
            retention='1 days')
 logger.add(ROOT_DIR + '/logs/error.{time:YYYY-MM-DD}.log', format=log_format, level="ERROR", retention='1 days')
+logger.add(CustomHandler(), level="INFO", format="{message}")
 
 
 def calculate_fee(price, qty, side: StockOrderSide, market=StockMarket.US, no_commission=False):
