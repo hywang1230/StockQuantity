@@ -72,6 +72,7 @@ def reset_price_reminder(strategy_config):
         logger.error('set price up error:{}', ask_data)
 
 
+order_id_set = set()
 def on_order_changed(event: PushOrderChanged):
     """
     长桥的订单状态推送
@@ -90,9 +91,17 @@ def on_order_changed(event: PushOrderChanged):
         if strategy_config is None:
             logger.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
             return
+
+        order_id = event.order_id
+
+        if order_id in order_id_set:
+            return
+
+        order_id_set.add(order_id)
+
         grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
         price = event.executed_price if order_status == StockOrderStatus.SUCCESS else event.submitted_price
-        order_id = event.order_id
+
         base_price = grid_config.base_price
         side = StockOrderSide.SELL if event.side == OrderSide.Sell else StockOrderSide.BUY
         market = StockMarket[strategy_config.market]
@@ -114,6 +123,13 @@ class TradeOrderHandler(TradeOrderHandlerBase):
             if order_status not in ('CANCELLED_ALL', 'FILLED_ALL'):
                 return
 
+            order_id = content['order_id'][0]
+
+            if order_id in order_id_set:
+                return
+
+            order_id_set.add(order_id)
+
             order_status = StockOrderStatus.SUCCESS if order_status == 'FILLED_ALL' else StockOrderStatus.CANCELED
             stock_code = content['code'][0].split('.')[-1]
             strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
@@ -123,7 +139,7 @@ class TradeOrderHandler(TradeOrderHandlerBase):
                 return
             grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
             price = content['dealt_avg_price'][0]
-            order_id = content['order_id'][0]
+
             base_price = grid_config.base_price
             side = StockOrderSide.SELL if content['trd_side'][0] in ('SELL', 'SELL_SHORT') else StockOrderSide.BUY
             market = StockMarket[strategy_config.market]
