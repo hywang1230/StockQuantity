@@ -24,14 +24,17 @@ class PriceReminder(PriceReminderHandlerBase):
             else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side)
 
         if not success:
-            reset_price_reminder(strategy_config)
+            reset_price_reminder(strategy_config.stock_code, Strategy.GRID)
 
 
-def reset_price_reminder(strategy_config):
+def reset_price_reminder(stock_code, strategy: Strategy):
     """
     重置到价提醒，先删除后新增
-    :param strategy_config: 配置信息
+    :param stock_code: 股票代码
+    :param strategy: 策略
     """
+    strategy_config = stock_strategy_config.query_strategy_config(stock_code, strategy)
+
     grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
 
     quote_ctx = FutuContext.instance().get_quote_context()
@@ -161,7 +164,7 @@ def after_order(strategy_config, grid_config, order_status: StockOrderStatus, pr
         grid_strategy_config.update_base_price(grid_config.id, base_price)
         stock_strategy_config.update_reminder_quantity(strategy_config.id, qty, side)
 
-    reset_price_reminder(strategy_config)
+    reset_price_reminder(strategy_config.stock_code, Strategy.GRID)
 
 
 def query_order_status_task():
@@ -240,6 +243,6 @@ def init():
         FutuContext.instance().get_quote_context().set_handler(PriceReminder())
 
     for strategy_config in strategy_config_list:
-        reset_price_reminder(strategy_config)
+        reset_price_reminder(strategy_config.stock_code, Strategy.GRID)
 
     print('price_reminder start success...')
