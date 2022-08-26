@@ -1,19 +1,20 @@
 from src.configuration import FutuConfiguration
 from src.db import *
-from futu import *
+import futu
 import pandas as pd
 from src.util import *
 import datetime
 import threading
-from longbridge.openapi import *
+import longbridge.openapi as lb
 from decimal import Decimal
-import queue
 
 pd.set_option('display.max_rows', 5000)
 pd.set_option('display.max_columns', 5000)
 pd.set_option('display.width', 1000)
-SysConfig.enable_proto_encrypt(is_encrypt=True)
-SysConfig.set_init_rsa_file(ROOT_DIR + "/rsa")
+futu.SysConfig.enable_proto_encrypt(is_encrypt=True)
+futu.SysConfig.set_init_rsa_file(ROOT_DIR + "/rsa")
+
+order_id_set = set()
 
 
 class FutuContext(object):
@@ -37,24 +38,26 @@ class FutuContext(object):
 
     def __init_trade_context(self):
         config = FutuConfiguration()
-        self.__trd_ctx_dict = {StockMarket.US: OpenSecTradeContext(filter_trdmarket=TrdMarket.US, host=config.host,
-                                                                   port=config.port,
-                                                                   security_firm=SecurityFirm.FUTUSECURITIES),
-                               StockMarket.HK: OpenSecTradeContext(filter_trdmarket=TrdMarket.HK, host=config.host,
-                                                                   port=config.port,
-                                                                   security_firm=SecurityFirm.FUTUSECURITIES)}
+        self.__trd_ctx_dict = {StockMarket.US: futu.OpenSecTradeContext(filter_trdmarket=futu.TrdMarket.US,
+                                                                        host=config.host,
+                                                                        port=config.port,
+                                                                        security_firm=futu.SecurityFirm.FUTUSECURITIES),
+                               StockMarket.HK: futu.OpenSecTradeContext(filter_trdmarket=futu.TrdMarket.HK,
+                                                                        host=config.host,
+                                                                        port=config.port,
+                                                                        security_firm=futu.SecurityFirm.FUTUSECURITIES)}
 
         for ctx in self.__trd_ctx_dict.values():
             ctx.unlock_trade(password_md5=config.unlock_password_md5)
 
     def __init_quote_context(self):
         config = FutuConfiguration()
-        self.__quote_ctx = OpenQuoteContext(host=config.host, port=config.port)
+        self.__quote_ctx = futu.OpenQuoteContext(host=config.host, port=config.port)
 
-    def get_trade_context(self, market: StockMarket) -> OpenSecTradeContext:
+    def get_trade_context(self, market: StockMarket) -> futu.OpenSecTradeContext:
         return self.__trd_ctx_dict.get(market)
 
-    def get_quote_context(self) -> OpenQuoteContext:
+    def get_quote_context(self) -> futu.OpenQuoteContext:
         return self.__quote_ctx
 
 
@@ -77,20 +80,23 @@ class LongbridgeContext(object):
     def __init_trade_context(self):
         self.__refresh_token()
         auth_config = self.__get_config()
-        self.__trade_context = TradeContext(auth_config)
+        self.__trade_context = lb.TradeContext(auth_config)
 
-    def get_trade_context(self) -> TradeContext:
+    def get_trade_context(self) -> lb.TradeContext:
         return self.__trade_context
 
     def __refresh_token(self):
-        auth_config = self.__get_config()
-        resp = auth_config.refresh_access_token()
-        longbridge_auth.update_token(resp, datetime.datetime.now().date() + datetime.timedelta(days=90))
+        config = longbridge_auth.get_auth()
+        now = datetime.datetime.now().date()
+        if config.token_expired_time - datetime.timedelta(days=30) < now:
+            auth_config = self.__get_config()
+            resp = auth_config.refresh_access_token()
+            longbridge_auth.update_token(resp, datetime.datetime.now().date() + datetime.timedelta(days=90))
 
     @staticmethod
     def __get_config():
         config = longbridge_auth.get_auth()
-        return Config(app_key=config.app_key, app_secret=config.app_secret, access_token=config.access_token)
+        return lb.Config(app_key=config.app_key, app_secret=config.app_secret, access_token=config.access_token)
 
 
 class OrderLock(object):
@@ -140,9 +146,14 @@ class BaseStrategy(object):
 
         # check now is in trade time
         now = datetime.datetime.now().strftime('%H:%M:%S')
-        if (strategy_config.market == 'US' and '04:00:00' < now < '21:30:00') \
-                or (strategy_config.market == 'HK' and (now < '09:30:00' or now > '16:00:00')):
-            logger.info('%s is not in trade time', now)
+        if (strategy_config.market == 'US' and '04:00:10' < now < '21:29:50') \
+                or (strategy_config.market == 'HK' and (now < '09:29:50' or now > '16:00:10')):
+            logger.info('{} is not in trade time', now)
+            return False
+
+        lock = OrderLock.instance()
+        if not (lock.lock(stock_code, strategy, side)):
+            logger.error('stock_code={}, strategy={},side={} lock fail', stock_code, strategy, side)
             return False
 
         # check reminder quantity > 0
@@ -150,11 +161,6 @@ class BaseStrategy(object):
             else strategy_config.remaining_buy_quantity
         if reminder_quantity <= 0:
             logger.info('stock_code={}, strategy={},side={} reminder_quantity is zero', stock_code, strategy, side)
-            return False
-
-        lock = OrderLock.instance()
-        if not (lock.lock(stock_code, strategy, side)):
-            logger.info('stock_code={}, strategy={},side={} lock fail', stock_code, strategy, side)
             return False
 
         try:
@@ -172,29 +178,25 @@ class BaseStrategy(object):
         return False, None
 
 
-longbridge_order_queue = queue.Queue(maxsize=20)
-
-
 class LongbridgeOrder(BaseStrategy):
 
     def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
         try:
             resp = LongbridgeContext.instance().get_trade_context().submit_order(
-                side=OrderSide.Sell if side == StockOrderSide.SELL else OrderSide.Buy,
+                side=lb.OrderSide.Sell if side == StockOrderSide.SELL else lb.OrderSide.Buy,
                 symbol=stock_code + '.' + market.value,
-                order_type=OrderType.MO,
+                order_type=lb.OrderType.MO,
                 submitted_quantity=qty,
-                outside_rth=OutsideRTH.RTHOnly,
-                time_in_force=TimeInForceType.Day
+                outside_rth=lb.OutsideRTH.RTHOnly,
+                time_in_force=lb.TimeInForceType.Day
             )
 
             order_id = resp.order_id
 
-            logger.info('order success, stock_code={}, price={}, quantity={}, is_sell={}, order_id={}', stock_code,
-                        price, qty,
-                        side.name,
-                        order_id)
-            longbridge_order_queue.put(order_id)
+            logger.warning('order success, stock_code={}, price={}, quantity={}, is_sell={}, order_id={}', stock_code,
+                           price, qty,
+                           side.name,
+                           order_id)
             return True, order_id
 
         except:
@@ -206,22 +208,146 @@ class LongbridgeOrder(BaseStrategy):
 class FutuOrder(BaseStrategy):
 
     def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
-        trd_side = TrdSide.SELL if side == StockOrderSide.SELL else TrdSide.BUY
+        trd_side = futu.TrdSide.SELL if side == StockOrderSide.SELL else futu.TrdSide.BUY
 
         ret, data = FutuContext.instance().get_trade_context(market).place_order(price=price, qty=qty, code=stock_code,
                                                                                  trd_side=trd_side,
                                                                                  fill_outside_rth=False,
-                                                                                 order_type=OrderType.MARKET,
-                                                                                 trd_env=TrdEnv.REAL)
-        if ret == RET_OK:
+                                                                                 order_type=futu.OrderType.MARKET,
+                                                                                 trd_env=futu.TrdEnv.REAL)
+        if ret == futu.RET_OK:
             order_id = data['order_id'][0]
-            logger.info('place order success, stock_code={}, price={}, quantity={}, side={}, order_id={}', stock_code,
-                        price, qty,
-                        side, order_id)
+            logger.warning('place order success, stock_code={}, price={}, quantity={}, side={}, order_id={}',
+                           stock_code,
+                           price, qty,
+                           side, order_id)
 
             return True, order_id
         else:
-            logger.info('place order success, stock_code={}, price={}, quantity={}, side={}, error={}', stock_code,
-                        price, qty,
-                        side, data)
+            logger.warning('place order fail, stock_code={}, price={}, quantity={}, side={}, error={}', stock_code,
+                           price, qty,
+                           side, data)
             return False, None
+
+
+class OrderInfo:
+
+    def __init__(self) -> None:
+        self.stock_code = None
+        self.order_status = None
+        self.price = None
+        self.order_id = None
+        self.stock_grid_id = None
+
+
+class Observer:
+    def update_strategy(self, orderInfo: OrderInfo):
+        pass
+
+
+class Subject:
+
+    def __init__(self) -> None:
+        self.observers = {}
+
+    def subscribe(self, grid, observer: Observer) -> None:
+        self.observers[grid] = observer
+
+    def unsubscribe(self, grid: Strategy) -> None:
+        self.observers.pop(grid)
+
+    def notify(self, grid: Strategy, order_info: OrderInfo):
+        self.observers[grid].update_strategy(order_info)
+
+
+subject = Subject()
+
+
+def on_order_changed(event: lb.PushOrderChanged):
+    """
+    长桥的订单状态推送
+    :param event: 订单状态变更事件
+    :return:
+    """
+    logger.info("receive order changed msg:{}", event)
+
+    order_status = event.status
+    if order_status in (lb.OrderStatus.Canceled, lb.OrderStatus.Filled):
+        order_status = StockOrderStatus.SUCCESS if order_status == lb.OrderStatus.Filled else StockOrderStatus.CANCELED
+        stock_code = event.symbol.split('.')[0]
+        stock_code = stock_code.zfill(5) if event.symbol.split('.')[-1] == 'HK' else stock_code
+
+        order_id = event.order_id
+
+        if order_id in order_id_set:
+            return
+
+        order_id_set.add(order_id)
+
+        order_info = OrderInfo()
+        order_info.stock_code = stock_code
+        order_info.order_status = order_status
+        order_info.price = event.executed_price if order_status == StockOrderStatus.SUCCESS else event.submitted_price
+        order_info.order_id = order_id
+
+        after_order(order_info)
+
+
+class TradeOrderHandler(futu.TradeOrderHandlerBase):
+    """ order update push"""
+
+    def on_recv_rsp(self, rsp_pb):
+        ret, content = super(TradeOrderHandler, self).on_recv_rsp(rsp_pb)
+        logger.info('receive trade order msg, content: {}', content)
+        if ret == futu.RET_OK:
+            if content['trd_env'][0] == 'SIMULATE':
+                return
+
+            order_status = content['order_status'][0]
+            if order_status not in ('CANCELLED_ALL', 'FILLED_ALL'):
+                return
+
+            order_id = content['order_id'][0]
+
+            if order_id in order_id_set:
+                return
+
+            order_id_set.add(order_id)
+
+            order_status = StockOrderStatus.SUCCESS if order_status == 'FILLED_ALL' else StockOrderStatus.CANCELED
+            stock_code = content['code'][0].split('.')[-1]
+
+            order_info = OrderInfo()
+            order_info.stock_code = stock_code
+            order_info.order_status = order_status
+            order_info.price = content['dealt_avg_price'][0]
+            order_info.order_id = order_id
+
+            after_order(order_info)
+
+
+def after_order(order_info: OrderInfo):
+    order_record = trade_order_record.query_record(order_info.order_id)
+    if order_record is None:
+        return
+
+    strategy_config = stock_strategy_config.query_strategy_config(order_record.stock_code,
+                                                                  Strategy(order_record.strategy))
+
+    if strategy_config is None:
+        logger.info('no strategy config, stock_code={}, strategy={}', order_record.stock_code,
+                    Strategy(order_record.strategy).name)
+        return
+
+    order_info.stock_grid_id = strategy_config.id
+
+    fee = 0 if order_info.order_status == StockOrderStatus.CANCELED else \
+        calculate_fee(order_info.price, order_record.quantity, StockOrderSide(order_record.side),
+                      StockMarket(order_record.market), strategy_config.order_account == OrderAccount.LONGBRIDGE.value)
+    trade_order_record.update_record(order_info.order_id, order_info.price, order_info.order_status, fee)
+
+    if order_info.order_status == StockOrderStatus.SUCCESS:
+        stock_strategy_config.update_reminder_quantity(strategy_config.id, order_record.quantity,
+                                                       StockOrderSide(order_record.side))
+
+    subject.notify(Strategy(order_record.strategy), order_info)

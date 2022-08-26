@@ -53,3 +53,10 @@ def update_record(order_id, price, status: StockOrderStatus, fee):
     except:
         logger.exception('update record error, order_id={}, price={}, status={}, fee={}', order_id,
                          price, status, fee)
+
+
+def query_record(order_id) -> TradeOrderRecord:
+    try:
+        return TradeOrderRecord.get(order_id=order_id)
+    except DoesNotExist:
+        logger.info('not exist trade record: order_id={}, strategy={}', order_id)
