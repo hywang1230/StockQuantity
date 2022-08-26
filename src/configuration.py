@@ -1,6 +1,7 @@
 import configparser
-from src.util import *
+import os
 
+ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
 
 config = configparser.ConfigParser()
 config.read(ROOT_DIR + '/application.ini')
@@ -23,3 +24,11 @@ class FutuConfiguration:
         self.host = futu_dict['host']
         self.port = int(futu_dict['port'])
         self.unlock_password_md5 = futu_dict['unlock_password_md5']
+
+
+class TgConfiguration:
+
+    def __init__(self) -> None:
+        tg_dict = dict(config.items('tg'))
+        self.api_token = tg_dict['api_token']
+        self.chat_id = int(tg_dict['chat_id'])

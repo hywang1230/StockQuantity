@@ -140,9 +140,9 @@ class BaseStrategy(object):
 
         # check now is in trade time
         now = datetime.datetime.now().strftime('%H:%M:%S')
-        if (strategy_config.market == 'US' and '04:00:00' < now < '21:30:00') \
-                or (strategy_config.market == 'HK' and (now < '09:30:00' or now > '16:00:00')):
-            logger.info('%s is not in trade time', now)
+        if (strategy_config.market == 'US' and '04:00:10' < now < '21:29:50') \
+                or (strategy_config.market == 'HK' and (now < '09:29:50' or now > '16:00:10')):
+            logger.info('{} is not in trade time', now)
             return False
 
         # check reminder quantity > 0
@@ -154,7 +154,7 @@ class BaseStrategy(object):
 
         lock = OrderLock.instance()
         if not (lock.lock(stock_code, strategy, side)):
-            logger.info('stock_code={}, strategy={},side={} lock fail', stock_code, strategy, side)
+            logger.error('stock_code={}, strategy={},side={} lock fail', stock_code, strategy, side)
             return False
 
         try:
@@ -190,10 +190,10 @@ class LongbridgeOrder(BaseStrategy):
 
             order_id = resp.order_id
 
-            logger.info('order success, stock_code={}, price={}, quantity={}, is_sell={}, order_id={}', stock_code,
-                        price, qty,
-                        side.name,
-                        order_id)
+            logger.warning('order success, stock_code={}, price={}, quantity={}, is_sell={}, order_id={}', stock_code,
+                           price, qty,
+                           side.name,
+                           order_id)
             longbridge_order_queue.put(order_id)
             return True, order_id
 
@@ -215,13 +215,14 @@ class FutuOrder(BaseStrategy):
                                                                                  trd_env=TrdEnv.REAL)
         if ret == RET_OK:
             order_id = data['order_id'][0]
-            logger.info('place order success, stock_code={}, price={}, quantity={}, side={}, order_id={}', stock_code,
-                        price, qty,
-                        side, order_id)
+            logger.warning('place order success, stock_code={}, price={}, quantity={}, side={}, order_id={}',
+                           stock_code,
+                           price, qty,
+                           side, order_id)
 
             return True, order_id
         else:
-            logger.info('place order success, stock_code={}, price={}, quantity={}, side={}, error={}', stock_code,
-                        price, qty,
-                        side, data)
+            logger.warning('place order fail, stock_code={}, price={}, quantity={}, side={}, error={}', stock_code,
+                           price, qty,
+                           side, data)
             return False, None

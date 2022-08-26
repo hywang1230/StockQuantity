@@ -9,14 +9,13 @@ log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | {module} | {functi
 logger.remove()
 
 
-def info_only(record):
-    return record["level"].name == "INFO"
+def info_and_warning(record):
+    return record["level"].name in ("INFO", "WARNING")
 
 
-logger.add(ROOT_DIR + '/logs/app.{time:YYYY-MM-DD}.log', format=log_format, level="INFO", filter=info_only,
-           retention='1 days')
-logger.add(ROOT_DIR + '/logs/error.{time:YYYY-MM-DD}.log', format=log_format, level="ERROR", retention='1 days')
-logger.add(CustomHandler(), level="INFO", format="{message}")
+logger.add(ROOT_DIR + '/logs/app.log', format=log_format, level="INFO", filter=info_and_warning)
+logger.add(ROOT_DIR + '/logs/error.log', format=log_format, level="ERROR")
+logger.add(CustomHandler(), level="WARNING", format="{message}")
 
 
 def calculate_fee(price, qty, side: StockOrderSide, market=StockMarket.US, no_commission=False):

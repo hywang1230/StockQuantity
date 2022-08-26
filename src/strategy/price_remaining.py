@@ -51,8 +51,8 @@ def reset_price_reminder(stock_code, strategy: Strategy):
                                                              reminder_freq=PriceReminderFreq.ONCE,
                                                              value=reminder_price)
             if ret_ask == RET_OK:
-                logger.info('set price up success, stock_code={}, reminder_price={}', strategy_config.stock_code,
-                            reminder_price)
+                logger.warning('set price up success, stock_code={}, reminder_price={}', strategy_config.stock_code,
+                               reminder_price)
             else:
                 logger.error('error:{}', ask_data)
 
@@ -66,8 +66,8 @@ def reset_price_reminder(stock_code, strategy: Strategy):
                                                              reminder_freq=PriceReminderFreq.ONCE,
                                                              value=reminder_price)
             if ret_ask == RET_OK:
-                logger.info('set price down success, stock_code={}, reminder_price={}', strategy_config.stock_code,
-                            reminder_price)
+                logger.warning('set price down success, stock_code={}, reminder_price={}', strategy_config.stock_code,
+                               reminder_price)
             else:
                 logger.error('set price down error:{}', ask_data)
 
@@ -76,6 +76,8 @@ def reset_price_reminder(stock_code, strategy: Strategy):
 
 
 order_id_set = set()
+
+
 def on_order_changed(event: PushOrderChanged):
     """
     长桥的订单状态推送
