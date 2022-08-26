@@ -1,7 +1,7 @@
 from flask import Flask
-from src.strategy import price_remaining
+from src.strategy import grid_strategy
 
-price_remaining.init()
+grid_strategy.init()
 app = Flask(__name__)
 
 
