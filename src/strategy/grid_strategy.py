@@ -52,7 +52,8 @@ class StockQuoteListen(futu.StockQuoteHandlerBase):
 
         price = data['last_price'][0]
         price_info = monitor_code_dict[stock_code]
-        if price <= price_info['buy_price'] or price >= price_info['sell_price']:
+        if (price_info['buy_price'] is not None and price <= price_info['buy_price']) \
+                or (price_info['sell_price'] is not None and price >= price_info['sell_price']):
             monitor_code_dict.pop(stock_code)
 
             strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
@@ -144,10 +145,16 @@ def reset_price_monitor(stock_code):
     grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
 
     code = strategy_config.stock_code
-    sell_price = calculate_amplitude_price(grid_config.base_price, grid_config, True)
-    buy_price = calculate_amplitude_price(grid_config.base_price, grid_config, False)
+    price_info = {}
 
-    price_info = {'sell_price': sell_price, 'buy_price': buy_price}
+    if strategy_config.remaining_buy_quantity > 0:
+        buy_price = calculate_amplitude_price(grid_config.base_price, grid_config, False)
+        price_info['buy_price'] = buy_price
+
+    if strategy_config.remaining_sell_quantity > 0:
+        sell_price = calculate_amplitude_price(grid_config.base_price, grid_config, True)
+        price_info['sell_price'] = sell_price
+
     monitor_code_dict[code] = price_info
 
 
