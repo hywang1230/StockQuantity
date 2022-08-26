@@ -52,8 +52,8 @@ class StockQuoteListen(futu.StockQuoteHandlerBase):
 
         price = data['last_price'][0]
         price_info = monitor_code_dict[stock_code]
-        if (price_info['buy_price'] is not None and price <= price_info['buy_price']) \
-                or (price_info['sell_price'] is not None and price >= price_info['sell_price']):
+        if ('buy_price' in price_info.keys() and price <= price_info['buy_price']) \
+                or ('sell_price' in price_info.keys() and price >= price_info['sell_price']):
             monitor_code_dict.pop(stock_code)
 
             strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
