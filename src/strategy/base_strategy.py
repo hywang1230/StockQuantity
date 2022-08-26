@@ -1,3 +1,5 @@
+import time
+
 from src.configuration import FutuConfiguration
 from src.db import *
 import futu
@@ -327,9 +329,13 @@ class TradeOrderHandler(futu.TradeOrderHandlerBase):
 
 
 def after_order(order_info: OrderInfo):
+    logger.info('deal after order, order_id={}', order_info.order_id)
     order_record = trade_order_record.query_record(order_info.order_id)
     if order_record is None:
-        return
+        time.sleep(10)
+        order_record = trade_order_record.query_record(order_info.order_id)
+        if order_record is None:
+            logger.info('order record is null, order_id', order_info.order_id)
 
     strategy_config = stock_strategy_config.query_strategy_config(order_record.stock_code,
                                                                   Strategy(order_record.strategy))

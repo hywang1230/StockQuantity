@@ -59,4 +59,4 @@ def query_record(order_id) -> TradeOrderRecord:
     try:
         return TradeOrderRecord.get(order_id=order_id)
     except DoesNotExist:
-        logger.info('not exist trade record: order_id={}, strategy={}', order_id)
+        logger.info('not exist trade record: order_id={}', order_id)

@@ -76,6 +76,7 @@ class GridObserver(Observer):
     更新网格
     """
     def update_strategy(self, order_info: OrderInfo):
+        logger.info('update strategy, order_id={}', order_info.order_id)
         order_record = trade_order_record.query_record(order_info.order_id)
         if order_info.order_status == StockOrderStatus.SUCCESS:
             stock_strategy_config.update_reminder_quantity(order_info.stock_grid_id, order_record.quantity,
