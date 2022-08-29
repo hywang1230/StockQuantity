@@ -56,13 +56,16 @@ class StockQuoteListen(futu.StockQuoteHandlerBase):
                 or ('sell_price' in price_info.keys() and price >= price_info['sell_price']):
             monitor_code_dict.pop(stock_code)
 
+            logger.info('receive quote,{}', data)
+
             strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
 
             if strategy_config is None:
                 logger.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
                 return
 
-            side = StockOrderSide.SELL if price >= price_info['sell_price'] else StockOrderSide.BUY
+            side = StockOrderSide.SELL if 'sell_price' in price_info.keys() and price >= price_info['sell_price']\
+                else StockOrderSide.BUY
             success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
                 if strategy_config.order_account == 1 \
                 else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side)
@@ -158,6 +161,8 @@ def reset_price_monitor(stock_code):
 
     monitor_code_dict[code] = price_info
 
+    logger.warning('{}', monitor_code_dict)
+
 
 def subscribe_quote(stocks: list):
     quote_ctx = FutuContext.instance().get_quote_context()
@@ -230,5 +235,4 @@ def init():
     if len(stock_hk) > 0:
         subscribe_quote(stock_hk)
 
-    print(monitor_code_dict)
     print('price_reminder start success...')
