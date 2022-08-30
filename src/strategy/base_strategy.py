@@ -252,7 +252,7 @@ class Subject:
     def __init__(self) -> None:
         self.observers = {}
 
-    def subscribe(self, grid, observer: Observer) -> None:
+    def subscribe(self, grid: Strategy, observer: Observer) -> None:
         self.observers[grid] = observer
 
     def unsubscribe(self, grid: Strategy) -> None:

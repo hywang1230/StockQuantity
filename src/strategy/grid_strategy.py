@@ -1,6 +1,5 @@
 from src.strategy.base_strategy import *
 
-
 monitor_code_dict = {}
 
 
@@ -64,7 +63,7 @@ class StockQuoteListen(futu.StockQuoteHandlerBase):
                 logger.info('no strategy config, stock_code={}, strategy={}', stock_code, Strategy.GRID)
                 return
 
-            side = StockOrderSide.SELL if 'sell_price' in price_info.keys() and price >= price_info['sell_price']\
+            side = StockOrderSide.SELL if 'sell_price' in price_info.keys() and price >= price_info['sell_price'] \
                 else StockOrderSide.BUY
             success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
                 if strategy_config.order_account == 1 \
@@ -78,12 +77,16 @@ class GridObserver(Observer):
     """
     更新网格
     """
+
     def update_strategy(self, order_info: OrderInfo):
         logger.info('update strategy, order_id={}', order_info.order_id)
         order_record = trade_order_record.query_record(order_info.order_id)
+
         if order_info.order_status == StockOrderStatus.SUCCESS:
-            stock_strategy_config.update_reminder_quantity(order_info.stock_grid_id, order_record.quantity,
-                                                           StockOrderSide(order_record.side))
+            grid_config = grid_strategy_config.query_strategy_config(order_info.stock_grid_id)
+            base_price = calculate_amplitude_price(grid_config.base_price, grid_config,
+                                                   StockOrderSide(order_record.side) == StockOrderSide.SELL)
+            grid_strategy_config.update_base_price(grid_config.id, base_price)
 
         if order_record.market == StockMarket.US:
             reset_price_reminder(order_info.stock_code)
@@ -206,7 +209,7 @@ def has_futu_hk(strategy_config_list):
 
 
 def init():
-    subject.subscribe(StockMarket.US, GridObserver())
+    subject.subscribe(Strategy.GRID, GridObserver())
     strategy_config_list = stock_strategy_config.query_all_config(Strategy.GRID)
 
     if strategy_config_list is not None:
