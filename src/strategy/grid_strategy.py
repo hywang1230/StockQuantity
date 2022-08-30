@@ -1,4 +1,4 @@
-from src.strategy.base_strategy import *
+from src.strategy.stock_order import *
 
 monitor_code_dict = {}
 
