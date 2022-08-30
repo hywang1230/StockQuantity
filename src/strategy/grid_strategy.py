@@ -90,7 +90,7 @@ class GridObserver(Observer):
             config.base_price = base_price
             stock_strategy_config.update_base_price(config.id, base_price)
 
-        if order_record.market == StockMarket.US:
+        if order_record.market == StockMarket.US.value:
             reset_price_reminder(config)
         else:
             reset_price_monitor(config)
