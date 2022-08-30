@@ -4,6 +4,7 @@ from src.db import *
 import datetime
 from decimal import Decimal
 from src.util import *
+import time
 
 
 class OrderLock(object):
@@ -45,7 +46,7 @@ class OrderLock(object):
 
 
 class BaseStrategy(object):
-    def order(self, stock_code: str, strategy: Strategy, price: Decimal, side: StockOrderSide, **kwargs):
+    def order(self, stock_code: str, strategy: Strategy, price: Decimal, side: StockOrderSide):
         strategy_config = stock_strategy_config.query_strategy_config(stock_code, strategy)
         if strategy_config is None:
             logger.info('no strategy config of stock_code={}, strategy={}', stock_code, strategy)
@@ -81,8 +82,9 @@ class BaseStrategy(object):
         finally:
             lock.release_lock(stock_code, strategy, side)
 
-    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
-        return False, None
+    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide) \
+            -> tuple[bool, str]:
+        return False, ''
 
 
 class LongbridgeOrder(BaseStrategy):
@@ -91,7 +93,7 @@ class LongbridgeOrder(BaseStrategy):
         try:
             resp = LongbridgeContext.instance().get_trade_context().submit_order(
                 side=lb.OrderSide.Sell if side == StockOrderSide.SELL else lb.OrderSide.Buy,
-                symbol=stock_code + '.' + market.value,
+                symbol=stock_code + '.' + str(market.value),
                 order_type=lb.OrderType.MO,
                 submitted_quantity=qty,
                 outside_rth=lb.OutsideRTH.RTHOnly,
@@ -134,7 +136,7 @@ class FutuOrder(BaseStrategy):
             logger.warning('place order fail, stock_code={}, price={}, quantity={}, side={}, error={}', stock_code,
                            price, qty,
                            side, data)
-            return False, None
+            return False, ''
 
 
 class OrderInfo:

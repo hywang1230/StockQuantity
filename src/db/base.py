@@ -1,11 +1,6 @@
 from peewee import *
 from playhouse.shortcuts import ReconnectMixin
 from src.configuration import DbConfiguration
-from src.util import *
-from decimal import Decimal
-from src.order_enum import StockOrderSide, StockMarket, Strategy, StockOrderStatus
-import datetime
-from decimal import Decimal
 
 db_configuration = DbConfiguration()
 
@@ -37,4 +32,3 @@ class BaseModel(Model):
             type(self).__name__,
             ', '.join('%s=%s' % item for item in vars(self).items())
         )
-

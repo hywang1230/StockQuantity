@@ -95,5 +95,3 @@ class LongbridgeContext(object):
     def __get_config():
         config = longbridge_auth.get_auth()
         return lb.Config(app_key=config.app_key, app_secret=config.app_secret, access_token=config.access_token)
-
-
