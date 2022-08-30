@@ -88,7 +88,7 @@ class GridObserver(Observer):
                                                    StockOrderSide(order_record.side) == StockOrderSide.SELL)
             grid_strategy_config.update_base_price(grid_config.id, base_price)
 
-        if order_record.market == StockMarket.US:
+        if order_record.market == StockMarket.US.value:
             reset_price_reminder(order_info.stock_code)
         else:
             reset_price_monitor(order_info.stock_code)
