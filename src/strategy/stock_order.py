@@ -46,7 +46,7 @@ class OrderLock(object):
 
 
 class BaseStrategy(object):
-    def order(self, stock_code: str, strategy: Strategy, price: Decimal, side: StockOrderSide):
+    def order(self, stock_code: str, strategy: Strategy, price: Decimal, side: StockOrderSide, **kwargs):
         strategy_config = stock_strategy_config.query_strategy_config(stock_code, strategy)
         if strategy_config is None:
             logger.info('no strategy config of stock_code={}, strategy={}', stock_code, strategy)
@@ -75,7 +75,7 @@ class BaseStrategy(object):
             qty = strategy_config.single_sell_quantity if StockOrderSide.SELL == side \
                 else strategy_config.single_buy_quantity
             market = StockMarket[strategy_config.market]
-            success, order_id = self.place_order(stock_code, market, price, qty, side)
+            success, order_id = self.place_order(stock_code, market, price, qty, side, **kwargs)
             if success:
                 trade_order_record.save_record(stock_code, market, strategy, order_id, price, qty, side)
             return success
@@ -89,22 +89,32 @@ class BaseStrategy(object):
 
 class LongbridgeOrder(BaseStrategy):
 
-    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
+    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide,
+                    **kwargs):
+
+        params = {}
+        params.side = lb.OrderSide.Sell if side == StockOrderSide.SELL else lb.OrderSide.Buy
+        params.symbol = stock_code + '.' + str(market.value)
+
+        params.order_type = lb.OrderType.MO
+        if AMPLITUDE_TYPE_KEY in kwargs.keys():
+            if kwargs[AMPLITUDE_TYPE_KEY] == 1:
+                params.order_type = lb.OrderType.TSMPCT
+                params.trailing_percent = kwargs[TRAILING_KEY]
+            else:
+                params.order_type = lb.OrderType.TSMAMT
+                params.trailing_amount = kwargs[TRAILING_KEY]
+
+        params.submitted_quantity = qty
+        params.outside_rth = lb.OutsideRTH.RTHOnly
+        params.time_in_force = lb.TimeInForceType.Day
+
         try:
-            resp = LongbridgeContext.instance().get_trade_context().submit_order(
-                side=lb.OrderSide.Sell if side == StockOrderSide.SELL else lb.OrderSide.Buy,
-                symbol=stock_code + '.' + str(market.value),
-                order_type=lb.OrderType.MO,
-                submitted_quantity=qty,
-                outside_rth=lb.OutsideRTH.RTHOnly,
-                time_in_force=lb.TimeInForceType.Day
-            )
+            resp = LongbridgeContext.instance().get_trade_context().submit_order(params)
 
             order_id = resp.order_id
 
-            logger.warning('order success, stock_code={}, price={}, quantity={}, is_sell={}, order_id={}', stock_code,
-                           price, qty,
-                           side.name,
+            logger.warning('order success, params={}, order_id={}', params,
                            order_id)
             return True, order_id
 

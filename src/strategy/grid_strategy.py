@@ -26,9 +26,12 @@ class PriceReminder(futu.PriceReminderHandlerBase):
 
         price = content['price']
         side = StockOrderSide.SELL if content['reminder_type'] == 'PRICE_UP' else StockOrderSide.BUY
+        ext_info = eval(strategy_config.ext_info)
         success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
             if strategy_config.order_account == 1 \
-            else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side)
+            else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
+                                         AMPLITUDE_TYPE_KEY=ext_info[AMPLITUDE_TYPE_KEY],
+                                         TRAILING_KEY=ext_info[TRAILING_KEY])
 
         if not success:
             reset_price_reminder(strategy_config.stock_code)

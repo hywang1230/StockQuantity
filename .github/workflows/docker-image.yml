@@ -3,7 +3,7 @@ name: Publish Docker image   # workflow名称，可以在Github项目主页的�
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "optimization" ]
   pull_request:
     branches: [ "master" ]
 

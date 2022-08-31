@@ -8,6 +8,7 @@ ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
 RISE_AMPLITUDE_KEY = 'rise_amplitude'
 FALL_AMPLITUDE_KEY = 'fall_amplitude'
 AMPLITUDE_TYPE_KEY = 'amplitude_type'
+TRAILING_KEY = 'trailing'
 
 log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | {module} | {function} | {level} | {message}"
 logger.remove()
@@ -36,8 +37,12 @@ def calculate_fee(price, qty, side: StockOrderSide, market=StockMarket.US, no_co
     return fee
 
 
-def calculate_amplitude_price(base_price, config: dict, is_up: bool):
+def calculate_amplitude_price(base_price, config: str | dict, is_up: bool):
     base_price = float(base_price)
+
+    if type(config) == str:
+        config = eval(config)
+
     if is_up:
         base_price = base_price * (
                 1 + float(config[RISE_AMPLITUDE_KEY])) if config[AMPLITUDE_TYPE_KEY] == 1 \
