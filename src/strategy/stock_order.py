@@ -92,35 +92,41 @@ class LongbridgeOrder(BaseStrategy):
     def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide,
                     **kwargs):
 
-        params = {}
-        params.side = lb.OrderSide.Sell if side == StockOrderSide.SELL else lb.OrderSide.Buy
-        params.symbol = stock_code + '.' + str(market.value)
-
-        params.order_type = lb.OrderType.MO
+        order_type = lb.OrderType.MO
+        trailing_percent = None
+        trailing_amount = None
         if AMPLITUDE_TYPE_KEY in kwargs.keys():
             if kwargs[AMPLITUDE_TYPE_KEY] == 1:
-                params.order_type = lb.OrderType.TSMPCT
-                params.trailing_percent = kwargs[TRAILING_KEY]
+                order_type = lb.OrderType.TSMPCT
+                trailing_percent = kwargs[TRAILING_KEY]
             else:
-                params.order_type = lb.OrderType.TSMAMT
-                params.trailing_amount = kwargs[TRAILING_KEY]
-
-        params.submitted_quantity = qty
-        params.outside_rth = lb.OutsideRTH.RTHOnly
-        params.time_in_force = lb.TimeInForceType.Day
+                order_type = lb.OrderType.TSMAMT
+                trailing_amount = kwargs[TRAILING_KEY]
 
         try:
-            resp = LongbridgeContext.instance().get_trade_context().submit_order(params)
+            resp = LongbridgeContext.instance().get_trade_context().submit_order(
+                side=lb.OrderSide.Sell if side == StockOrderSide.SELL else lb.OrderSide.Buy,
+                symbol=stock_code + '.' + str(market.value),
+                order_type=order_type,
+                submitted_quantity=qty,
+                outside_rth=lb.OutsideRTH.RTHOnly,
+                time_in_force=lb.TimeInForceType.Day,
+                trailing_percent=trailing_percent,
+                trailing_amount=trailing_amount
+            )
 
             order_id = resp.order_id
 
-            logger.warning('order success, params={}, order_id={}', params,
+            logger.warning('order success, stock_code={}, price={}, quantity={}, is_sell={}, order_id={}', stock_code,
+                           price, qty,
+                           side.name,
                            order_id)
             return True, order_id
 
         except:
-            logger.exception('order success, stock_code={}, price={}, quantity={}, is_sell={}', stock_code,
-                             price, qty, side)
+            logger.warning('order fail, stock_code={}, price={}, quantity={}, is_sell={}', stock_code,
+                           price, qty,
+                           side.name)
         return False, None
 
 
