@@ -30,8 +30,8 @@ class PriceReminder(futu.PriceReminderHandlerBase):
         success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
             if strategy_config.order_account == 1 \
             else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
-                                         AMPLITUDE_TYPE_KEY=ext_info[AMPLITUDE_TYPE_KEY],
-                                         TRAILING_KEY=ext_info[TRAILING_KEY])
+                                         amplitude_type=ext_info[AMPLITUDE_TYPE_KEY],
+                                         trailing=ext_info[TRAILING_KEY])
 
         if not success:
             reset_price_reminder(strategy_config.stock_code)
@@ -73,8 +73,8 @@ class StockQuoteListen(futu.StockQuoteHandlerBase):
             success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
                 if strategy_config.order_account == 1 \
                 else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
-                                             AMPLITUDE_TYPE_KEY=ext_info[AMPLITUDE_TYPE_KEY],
-                                             TRAILING_KEY=ext_info[TRAILING_KEY])
+                                             amplitude_type=ext_info[AMPLITUDE_TYPE_KEY],
+                                             trailing=ext_info[TRAILING_KEY])
 
             if not success:
                 reset_price_monitor(strategy_config)
