@@ -1,4 +1,5 @@
 from src.db.base import *
+from src.util import *
 
 
 class LongbridgeAuth(BaseModel):
@@ -23,4 +24,3 @@ def get_auth() -> LongbridgeAuth:
 
 def update_token(token, token_expired_time):
     LongbridgeAuth.update(access_token=token, token_expired_time=token_expired_time).execute()
-

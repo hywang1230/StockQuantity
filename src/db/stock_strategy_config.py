@@ -1,4 +1,7 @@
 from src.db.base import *
+from src.util import *
+from src.order_enum import StockOrderSide, Strategy
+from decimal import Decimal
 
 
 class StockStrategyConfig(BaseModel):
@@ -10,6 +13,8 @@ class StockStrategyConfig(BaseModel):
     single_buy_quantity = IntegerField()
     remaining_buy_quantity = IntegerField()
     remaining_sell_quantity = IntegerField()
+    base_price = DecimalField()
+    ext_info = CharField()
     order_account = IntegerField()
     gmt_create = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
     gmt_modified = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
@@ -21,7 +26,7 @@ class StockStrategyConfig(BaseModel):
         )
 
 
-def query_strategy_config(stock_code, strategy: Strategy) -> StockStrategyConfig:
+def query_strategy_config(stock_code: str, strategy: Strategy) -> StockStrategyConfig:
     try:
         return StockStrategyConfig.get(stock_code=stock_code, strategy=strategy.value)
     except DoesNotExist:
@@ -49,3 +54,14 @@ def update_reminder_quantity(config_id: int, quantity: int, side: StockOrderSide
         logger.info('update reminder quantity success, id={}, quantity={}, side={}', config_id, quantity, side.name)
     except:
         logger.exception('update reminder quantity error, id={}, quantity={}, side={}', config_id, quantity, side.name)
+
+
+def update_base_price(config_id: int, price: Decimal):
+    try:
+        query = StockStrategyConfig.update(base_price=price) \
+            .where(StockStrategyConfig.id == config_id)
+
+        query.execute()
+        logger.info('update base price success, id={}, price={}', config_id, price)
+    except:
+        logger.exception('update base price error, id={}, price={}', config_id, price)

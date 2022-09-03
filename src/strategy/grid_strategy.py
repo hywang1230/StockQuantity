@@ -1,4 +1,5 @@
-from src.strategy.base_strategy import *
+from src.db.stock_strategy_config import StockStrategyConfig
+from src.strategy.stock_order import *
 
 monitor_code_dict = {}
 
@@ -25,9 +26,12 @@ class PriceReminder(futu.PriceReminderHandlerBase):
 
         price = content['price']
         side = StockOrderSide.SELL if content['reminder_type'] == 'PRICE_UP' else StockOrderSide.BUY
+        ext_info = eval(strategy_config.ext_info)
         success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
             if strategy_config.order_account == 1 \
-            else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side)
+            else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
+                                         amplitude_type=ext_info[AMPLITUDE_TYPE_KEY],
+                                         trailing=ext_info[TRAILING_KEY])
 
         if not success:
             reset_price_reminder(strategy_config.stock_code)
@@ -65,12 +69,15 @@ class StockQuoteListen(futu.StockQuoteHandlerBase):
 
             side = StockOrderSide.SELL if 'sell_price' in price_info.keys() and price >= price_info['sell_price'] \
                 else StockOrderSide.BUY
+            ext_info = eval(strategy_config.ext_info)
             success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
                 if strategy_config.order_account == 1 \
-                else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side)
+                else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
+                                             amplitude_type=ext_info[AMPLITUDE_TYPE_KEY],
+                                             trailing=ext_info[TRAILING_KEY])
 
             if not success:
-                reset_price_monitor(strategy_config.stock_code)
+                reset_price_monitor(strategy_config)
 
 
 class GridObserver(Observer):
@@ -82,26 +89,24 @@ class GridObserver(Observer):
         logger.info('update strategy, order_id={}', order_info.order_id)
         order_record = trade_order_record.query_record(order_info.order_id)
 
+        config = stock_strategy_config.query_strategy_config(order_info.stock_code, Strategy.GRID)
         if order_info.order_status == StockOrderStatus.SUCCESS:
-            grid_config = grid_strategy_config.query_strategy_config(order_info.stock_grid_id)
-            base_price = calculate_amplitude_price(grid_config.base_price, grid_config,
+            base_price = calculate_amplitude_price(config.base_price, config.ext_info,
                                                    StockOrderSide(order_record.side) == StockOrderSide.SELL)
-            grid_strategy_config.update_base_price(grid_config.id, base_price)
+            config.base_price = base_price
+            stock_strategy_config.update_base_price(config.id, base_price)
 
         if order_record.market == StockMarket.US.value:
-            reset_price_reminder(order_info.stock_code)
+            reset_price_reminder(config)
         else:
-            reset_price_monitor(order_info.stock_code)
+            reset_price_monitor(config)
 
 
-def reset_price_reminder(stock_code):
+def reset_price_reminder(strategy_config: StockStrategyConfig):
     """
     重置到价提醒，先删除后新增
-    :param stock_code: 股票代码
+    :param strategy_config: 配置
     """
-    strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
-
-    grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
 
     quote_ctx = FutuContext.instance().get_quote_context()
     code = strategy_config.market + '.' + strategy_config.stock_code
@@ -110,7 +115,7 @@ def reset_price_reminder(stock_code):
     if ret_ask == futu.RET_OK:
         # set price up
         if strategy_config.remaining_sell_quantity > 0:
-            reminder_price = calculate_amplitude_price(grid_config.base_price, grid_config, True)
+            reminder_price = calculate_amplitude_price(strategy_config.base_price, strategy_config.ext_info, True)
             ret_ask, ask_data = quote_ctx.set_price_reminder(code=code,
                                                              op=futu.SetPriceReminderOp.ADD,
                                                              reminder_type=futu.PriceReminderType.PRICE_UP,
@@ -124,7 +129,7 @@ def reset_price_reminder(stock_code):
 
         # set price down
         if strategy_config.remaining_buy_quantity > 0:
-            reminder_price = calculate_amplitude_price(grid_config.base_price, grid_config, False)
+            reminder_price = calculate_amplitude_price(strategy_config.base_price, strategy_config.ext_info, False)
 
             ret_ask, ask_data = quote_ctx.set_price_reminder(code,
                                                              op=futu.SetPriceReminderOp.ADD,
@@ -141,25 +146,21 @@ def reset_price_reminder(stock_code):
         logger.error('set price up error:{}', ask_data)
 
 
-def reset_price_monitor(stock_code):
+def reset_price_monitor(strategy_config: StockStrategyConfig):
     """
     重置监控的实时报价
-    :param stock_code: 股票代码
+    :param strategy_config: 配置
     :return:
     """
-    strategy_config = stock_strategy_config.query_strategy_config(stock_code, Strategy.GRID)
-
-    grid_config = grid_strategy_config.query_strategy_config(strategy_config.id)
-
     code = strategy_config.stock_code
     price_info = {}
 
     if strategy_config.remaining_buy_quantity > 0:
-        buy_price = calculate_amplitude_price(grid_config.base_price, grid_config, False)
+        buy_price = calculate_amplitude_price(strategy_config.base_price, strategy_config.ext_info, False)
         price_info['buy_price'] = buy_price
 
     if strategy_config.remaining_sell_quantity > 0:
-        sell_price = calculate_amplitude_price(grid_config.base_price, grid_config, True)
+        sell_price = calculate_amplitude_price(strategy_config.base_price, strategy_config.ext_info, True)
         price_info['sell_price'] = sell_price
 
     monitor_code_dict[code] = price_info
@@ -181,7 +182,7 @@ def subscribe_quote(stocks: list):
         return
 
     for strategy_config in stocks:
-        reset_price_monitor(strategy_config.stock_code)
+        reset_price_monitor(strategy_config)
 
 
 def has_longbridge(strategy_config_list):
@@ -231,7 +232,7 @@ def init():
     stock_hk = []
     for strategy_config in strategy_config_list:
         if strategy_config.market == StockMarket.US.value:
-            reset_price_reminder(strategy_config.stock_code)
+            reset_price_reminder(strategy_config)
         else:
             stock_hk.append(strategy_config)
 
