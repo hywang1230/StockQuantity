@@ -27,7 +27,9 @@ class PriceReminder(futu.PriceReminderHandlerBase):
         price = content['price']
         side = StockOrderSide.SELL if content['reminder_type'] == 'PRICE_UP' else StockOrderSide.BUY
         ext_info = eval(strategy_config.ext_info)
-        success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
+        success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
+                                    amplitude_type=ext_info[AMPLITUDE_TYPE_KEY],
+                                    trailing=ext_info[TRAILING_KEY]) \
             if strategy_config.order_account == 1 \
             else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
                                          amplitude_type=ext_info[AMPLITUDE_TYPE_KEY],
@@ -70,7 +72,9 @@ class StockQuoteListen(futu.StockQuoteHandlerBase):
             side = StockOrderSide.SELL if 'sell_price' in price_info.keys() and price >= price_info['sell_price'] \
                 else StockOrderSide.BUY
             ext_info = eval(strategy_config.ext_info)
-            success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side) \
+            success = FutuOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
+                                        amplitude_type=ext_info[AMPLITUDE_TYPE_KEY],
+                                        trailing=ext_info[TRAILING_KEY]) \
                 if strategy_config.order_account == 1 \
                 else LongbridgeOrder().order(stock_code, Strategy.GRID, Decimal(price), side,
                                              amplitude_type=ext_info[AMPLITUDE_TYPE_KEY],

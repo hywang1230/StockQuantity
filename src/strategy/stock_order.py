@@ -1,3 +1,5 @@
+import futu
+
 from src.strategy.context import *
 import threading
 from src.db import *
@@ -132,13 +134,29 @@ class LongbridgeOrder(BaseStrategy):
 
 class FutuOrder(BaseStrategy):
 
-    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide):
+    def place_order(self, stock_code: str, market: StockMarket, price: Decimal, qty: int, side: StockOrderSide,
+                    **kwargs):
         trd_side = futu.TrdSide.SELL if side == StockOrderSide.SELL else futu.TrdSide.BUY
+
+        order_type = futu.OrderType.MARKET
+        trail_type = None
+        trail_value = None
+        if AMPLITUDE_TYPE_KEY in kwargs.keys():
+            order_type = futu.OrderType.TRAILING_STOP
+            if kwargs[AMPLITUDE_TYPE_KEY] == 1:
+                trail_type = futu.TrailType.RATIO
+                trail_value = kwargs[TRAILING_KEY]
+            else:
+                trail_type = futu.TrailType.AMOUNT
+                trail_value = kwargs[TRAILING_KEY]
 
         ret, data = FutuContext.instance().get_trade_context(market).place_order(price=price, qty=qty, code=stock_code,
                                                                                  trd_side=trd_side,
                                                                                  fill_outside_rth=False,
-                                                                                 order_type=futu.OrderType.MARKET,
+                                                                                 order_type=order_type,
+                                                                                 trail_type=trail_type,
+                                                                                 trail_value=trail_value,
+                                                                                 trail_spread=0,
                                                                                  trd_env=futu.TrdEnv.REAL)
         if ret == futu.RET_OK:
             order_id = data['order_id'][0]
