@@ -290,7 +290,8 @@ def after_order(order_info: OrderInfo):
 
     fee = 0 if order_info.order_status == StockOrderStatus.CANCELED else \
         calculate_fee(order_info.price, order_record.quantity, StockOrderSide(order_record.side),
-                      StockMarket(order_record.market), strategy_config.order_account == OrderAccount.LONGBRIDGE.value)
+                      StockMarket(order_record.market), strategy_config.order_account == OrderAccount.LONGBRIDGE.value,
+                      '07226' == order_info.stock_code)
     trade_order_record.update_record(order_info.order_id, order_info.price, order_info.order_status, fee)
 
     if order_info.order_status == StockOrderStatus.SUCCESS:
